@@ -33,8 +33,6 @@ import (
 	"runtime"
 	"strconv"
 	"sync"
-
-	"github.com/gorilla/websocket"
 )
 
 /*--- Public Interface ---*/
@@ -63,24 +61,42 @@ type Conn struct {
 	Metadata  *AuthData
 
 	log           Logger
-	ws            *websocket.Conn
+	ws            WSConn
 	prepStmtCache map[string]*prepStmt
 	mux           sync.Mutex
 }
 
 func Connect(conf ConnConf) (*Conn, error) {
+
+	l := conf.Logger
+	if l == nil {
+		l = newDefaultLogger()
+	}
+
+	ws, err := WSConnect(conf, l)
+
+	return newConn(conf, l, ws, err)
+}
+
+func WrapConnectedWebSocket(conf ConnConf, ws WSConn) (*Conn, error) {
+
+	l := conf.Logger
+	if l == nil {
+		l = newDefaultLogger()
+	}
+
+	return newConn(conf, l, ws, nil)
+}
+
+func newConn(conf ConnConf, l Logger, ws WSConn, err error) (*Conn, error) {
+
 	c := &Conn{
 		Conf:          conf,
 		Stats:         map[string]int{},
-		log:           conf.Logger,
+		log:           l,
 		prepStmtCache: map[string]*prepStmt{},
+		ws:            ws,
 	}
-
-	if c.log == nil {
-		c.log = newDefaultLogger()
-	}
-
-	err := c.wsConnect()
 	if err != nil {
 		return nil, c.error("Unable to connect to Exasol: %s", err)
 	}
@@ -90,8 +106,8 @@ func Connect(conf ConnConf) (*Conn, error) {
 		return nil, c.error("Unable to login to Exasol: %s", err)
 	}
 
-	if conf.Timeout > 0 {
-		c.SetTimeout(conf.Timeout)
+	if c.Conf.Timeout > 0 {
+		c.SetTimeout(c.Conf.Timeout)
 	}
 	return c, nil
 }

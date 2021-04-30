@@ -21,6 +21,13 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+type WSConn interface {
+	Close() error
+	EnableWriteCompression(bool)
+	WriteJSON(interface{}) error
+	ReadJSON(interface{}) error
+}
+
 var (
 	defaultDialer = *websocket.DefaultDialer
 )
@@ -30,22 +37,21 @@ func init() {
 	defaultDialer.EnableCompression = false
 }
 
-func (c *Conn) wsConnect() error {
-	uri := fmt.Sprintf("%s:%d", c.Conf.Host, c.Conf.Port)
+func WSConnect(conf ConnConf, log Logger) (WSConn, error) {
+	uri := fmt.Sprintf("%s:%d", conf.Host, conf.Port)
 	u := url.URL{
 		Scheme: "ws",
 		Host:   uri,
 	}
-	c.log.Debugf("Connecting to %s", u.String())
+	log.Debugf("Connecting to %s", u.String())
 	// According to documentation:
 	// > It is safe to call Dialer's methods concurrently.
 	ws, resp, err := defaultDialer.Dial(u.String(), nil)
 	if err != nil {
-		c.log.Debugf("resp:%s", resp)
-		return err
+		log.Debugf("resp:%s", resp)
+		return nil, err
 	}
-	c.ws = ws
-	return nil
+	return ws, nil
 }
 
 // Request and Response are pointers to structs representing the API JSON.
